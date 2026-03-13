@@ -13,3 +13,4 @@ coverage/
 *.sqlite
 *.db
 
+.env.example

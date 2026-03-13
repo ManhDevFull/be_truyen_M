@@ -20,6 +20,7 @@ type Config struct {
 	DBName     string
 	DBSSLMode  string
 	DBDSN      string
+	DBAutoMigrate bool
 
 	RedisAddr     string
 	RedisPassword string
@@ -63,6 +64,7 @@ func Load() *Config {
 	cfg.DBName = getEnv("DB_NAME", "")
 	cfg.DBSSLMode = getEnv("DB_SSLMODE", "disable")
 	cfg.DBDSN = getEnv("DB_DSN", "")
+	cfg.DBAutoMigrate = getEnvBool("DB_AUTOMIGRATE", true)
 
 	cfg.RedisAddr = getEnv("REDIS_ADDR", "localhost:6379")
 	cfg.RedisPassword = getEnv("REDIS_PASSWORD", "")

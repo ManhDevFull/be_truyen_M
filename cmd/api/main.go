@@ -35,28 +35,32 @@ func main() {
 		zapLogger.Fatal("db connect failed", zap.Error(err))
 	}
 
-	if err := database.AutoMigrate(
-		&models.User{},
-		&models.Comic{},
-		&models.Chapter{},
-		&models.ReadingHistory{},
-		&models.PointsLog{},
-		&models.UserAdblock{},
-		&models.AdsStat{},
-		&models.AdsSettings{},
-		&models.DirectAd{},
-		&models.RefreshToken{},
-		&models.SupportTicket{},
-		&models.TicketMessage{},
-		&models.TrafficLog{},
-		&models.Genre{},
-		&models.ComicGenre{},
-		&models.ComicFollow{},
-		&models.RolePermission{},
-		&models.ActivityLog{},
-		&models.CrawlerLog{},
-	); err != nil {
-		zapLogger.Fatal("db migrate failed", zap.Error(err))
+	if cfg.DBAutoMigrate {
+		if err := database.AutoMigrate(
+			&models.User{},
+			&models.Comic{},
+			&models.Chapter{},
+			&models.ReadingHistory{},
+			&models.PointsLog{},
+			&models.UserAdblock{},
+			&models.AdsStat{},
+			&models.AdsSettings{},
+			&models.DirectAd{},
+			&models.RefreshToken{},
+			&models.SupportTicket{},
+			&models.TicketMessage{},
+			&models.TrafficLog{},
+			&models.Genre{},
+			&models.ComicGenre{},
+			&models.ComicFollow{},
+			&models.RolePermission{},
+			&models.ActivityLog{},
+			&models.CrawlerLog{},
+		); err != nil {
+			zapLogger.Fatal("db migrate failed", zap.Error(err))
+		}
+	} else {
+		zapLogger.Info("db automigrate disabled")
 	}
 
 	if err := db.EnsureComicSlugs(database); err != nil {
