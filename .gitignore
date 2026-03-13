@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+build/
+bin/
+tmp/
+coverage/
+*.log
+*.swp
+*.tmp
+*.sqlite
+*.db
+
