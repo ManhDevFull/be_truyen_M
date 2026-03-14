@@ -22,7 +22,7 @@ func Register(app *fiber.App, h *handlers.Handler) {
 
 	api := app.Group("/api")
 	api.Post("/auth/register", h.Register)
-	api.Post("/auth/login", middleware.LoginRateLimit(h.Redis), h.Login)
+	api.Post("/auth/login", h.Login)
 	api.Post("/auth/refresh", h.Refresh)
 	api.Post("/auth/logout", h.Logout)
 

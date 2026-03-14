@@ -17,6 +17,8 @@ import (
 const (
 	accessTokenTTL  = 5 * time.Minute
 	refreshTokenTTL = 30 * 24 * time.Hour
+	loginFailLimit  = 10
+	loginFailWindow = time.Minute
 )
 
 type RegisterRequest struct {
@@ -95,19 +97,22 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 		First(&user).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			h.markLoginFailure(c.IP())
+			if h.markLoginFailure(c.IP()) >= loginFailLimit {
+				return fiber.ErrTooManyRequests
+			}
 			return fiber.ErrUnauthorized
 		}
 		return fiber.ErrInternalServerError
 	}
 
 	if err := h.ensureNotBanned(&user); err != nil {
-		h.markLoginFailure(c.IP())
 		return err
 	}
 
 	if !utils.CheckPassword(user.PasswordHash, req.Password) {
-		h.markLoginFailure(c.IP())
+		if h.markLoginFailure(c.IP()) >= loginFailLimit {
+			return fiber.ErrTooManyRequests
+		}
 		return fiber.ErrUnauthorized
 	}
 
@@ -129,20 +134,21 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	})
 }
 
-func (h *Handler) markLoginFailure(ip string) {
+func (h *Handler) markLoginFailure(ip string) int64 {
 	if h.Redis == nil || ip == "" {
-		return
+		return 0
 	}
 	key := "rl:login:" + ip
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	count, err := h.Redis.Incr(ctx, key).Result()
 	if err != nil {
-		return
+		return 0
 	}
 	if count == 1 {
-		h.Redis.Expire(ctx, key, time.Minute)
+		h.Redis.Expire(ctx, key, loginFailWindow)
 	}
+	return count
 }
 
 func (h *Handler) clearLoginFailures(ip string) {
