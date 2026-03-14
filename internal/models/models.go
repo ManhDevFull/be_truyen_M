@@ -57,7 +57,7 @@ type Comic struct {
 	Slug                   string     `gorm:"size:220;uniqueIndex" json:"slug,omitempty"`
 	Author                 string     `gorm:"size:120" json:"author,omitempty"`
 	Description            string     `gorm:"type:text" json:"description,omitempty"`
-	Cover                  string     `gorm:"size:255" json:"cover,omitempty"`
+	Cover                  string     `gorm:"type:text" json:"cover,omitempty"`
 	Views                  int        `gorm:"not null;default:0" json:"views"`
 	ContentType            string     `gorm:"size:20;not null;default:comic" json:"content_type"`
 	Status                 string     `gorm:"size:20;not null;default:ongoing" json:"status"`

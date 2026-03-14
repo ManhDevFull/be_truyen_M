@@ -61,15 +61,14 @@ func LoginRateLimit(rdb *redis.Client) fiber.Handler {
 		key := "rl:login:" + c.IP()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-
-		count, err := rdb.Incr(ctx, key).Result()
+		count, err := rdb.Get(ctx, key).Int64()
+		if err == redis.Nil {
+			return c.Next()
+		}
 		if err != nil {
 			return c.Next()
 		}
-		if count == 1 {
-			rdb.Expire(ctx, key, time.Minute)
-		}
-		if count > 5 {
+		if count >= 5 {
 			return fiber.ErrTooManyRequests
 		}
 		return c.Next()

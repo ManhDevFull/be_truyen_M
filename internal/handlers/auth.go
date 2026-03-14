@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -94,16 +95,19 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 		First(&user).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
+			h.markLoginFailure(c.IP())
 			return fiber.ErrUnauthorized
 		}
 		return fiber.ErrInternalServerError
 	}
 
 	if err := h.ensureNotBanned(&user); err != nil {
+		h.markLoginFailure(c.IP())
 		return err
 	}
 
 	if !utils.CheckPassword(user.PasswordHash, req.Password) {
+		h.markLoginFailure(c.IP())
 		return fiber.ErrUnauthorized
 	}
 
@@ -111,6 +115,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.ErrInternalServerError
 	}
+	h.clearLoginFailures(c.IP())
 
 	return c.JSON(fiber.Map{
 		"token": token,
@@ -122,6 +127,32 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 			"role":     user.Role,
 		},
 	})
+}
+
+func (h *Handler) markLoginFailure(ip string) {
+	if h.Redis == nil || ip == "" {
+		return
+	}
+	key := "rl:login:" + ip
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	count, err := h.Redis.Incr(ctx, key).Result()
+	if err != nil {
+		return
+	}
+	if count == 1 {
+		h.Redis.Expire(ctx, key, time.Minute)
+	}
+}
+
+func (h *Handler) clearLoginFailures(ip string) {
+	if h.Redis == nil || ip == "" {
+		return
+	}
+	key := "rl:login:" + ip
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	h.Redis.Del(ctx, key) //nolint:errcheck
 }
 
 func (h *Handler) Refresh(c *fiber.Ctx) error {
