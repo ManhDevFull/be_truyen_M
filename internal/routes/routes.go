@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	"truyenm/backend/internal/handlers"
@@ -13,6 +14,7 @@ import (
 
 func Register(app *fiber.App, h *handlers.Handler) {
 	app.Use(recover.New())
+	app.Use(compress.New(compress.Config{Level: compress.LevelBestSpeed}))
 	app.Use(middleware.SecurityHeaders())
 	app.Use(middleware.RequestLogger(h.Logger))
 

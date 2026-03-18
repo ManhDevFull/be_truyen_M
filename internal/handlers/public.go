@@ -1,16 +1,28 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/redis/go-redis/v9"
 
 	"truyenm/backend/internal/models"
 	"truyenm/backend/internal/utils"
 )
 
 func (h *Handler) ListComics(c *fiber.Ctx) error {
+	cacheKey := ""
+	if h.Redis != nil {
+		cacheKey = "cache:comics:" + c.OriginalURL()
+		if cached, ok := getCache(c.Context(), h.Redis, cacheKey); ok {
+			c.Type("json")
+			return c.SendString(cached)
+		}
+	}
+
 	page, limit := utils.ParsePagination(c, 1, 20)
 	q := c.Query("q")
 	status := c.Query("status")
@@ -19,12 +31,13 @@ func (h *Handler) ListComics(c *fiber.Ctx) error {
 
 	offset := (page - 1) * limit
 
-	db := h.DB.Model(&models.Comic{}).Preload("Genres")
+	db := h.DB.Model(&models.Comic{})
 	var total int64
 
 	if q != "" {
 		like := "%" + q + "%"
-		db = db.Where("title ILIKE ? OR author ILIKE ?", like, like)
+		db = db.Where("search_tsv @@ plainto_tsquery('simple', ?)", q).
+			Or("author ILIKE ?", like)
 	}
 	if status != "" {
 		db = db.Where("status = ?", status)
@@ -32,6 +45,9 @@ func (h *Handler) ListComics(c *fiber.Ctx) error {
 	if genre != "" {
 		db = db.Joins("JOIN comic_genres ON comic_genres.comic_id = comics.id").
 			Joins("JOIN genres ON genres.id = comic_genres.genre_id AND genres.slug = ? AND genres.is_active = true", genre)
+	}
+	if c.Query("include_genres") == "1" {
+		db = db.Preload("Genres")
 	}
 
 	db.Count(&total)
@@ -52,12 +68,17 @@ func (h *Handler) ListComics(c *fiber.Ctx) error {
 		return fiber.ErrInternalServerError
 	}
 
-	return c.JSON(fiber.Map{
+	response := fiber.Map{
 		"page":  page,
 		"limit": limit,
 		"total": total,
 		"data":  comics,
-	})
+	}
+
+	if cacheKey != "" {
+		setCache(c.Context(), h.Redis, cacheKey, response, 30*time.Second)
+	}
+	return c.JSON(response)
 }
 
 func (h *Handler) GetComic(c *fiber.Ctx) error {
@@ -140,14 +161,36 @@ func (h *Handler) GetChapterBySlug(c *fiber.Ctx) error {
 }
 
 func (h *Handler) ListGenres(c *fiber.Ctx) error {
+	cacheKey := ""
+	if h.Redis != nil {
+		cacheKey = "cache:genres"
+		if cached, ok := getCache(c.Context(), h.Redis, cacheKey); ok {
+			c.Type("json")
+			return c.SendString(cached)
+		}
+	}
+
 	var genres []models.Genre
 	if err := h.DB.Where("is_active = true").Order("name asc").Find(&genres).Error; err != nil {
 		return fiber.ErrInternalServerError
 	}
-	return c.JSON(fiber.Map{"data": genres})
+	response := fiber.Map{"data": genres}
+	if cacheKey != "" {
+		setCache(c.Context(), h.Redis, cacheKey, response, 10*time.Minute)
+	}
+	return c.JSON(response)
 }
 
 func (h *Handler) ListTopReaders(c *fiber.Ctx) error {
+	cacheKey := ""
+	if h.Redis != nil {
+		cacheKey = "cache:leaderboard:" + c.OriginalURL()
+		if cached, ok := getCache(c.Context(), h.Redis, cacheKey); ok {
+			c.Type("json")
+			return c.SendString(cached)
+		}
+	}
+
 	limit := c.QueryInt("limit", 5)
 	if limit <= 0 {
 		limit = 5
@@ -198,7 +241,33 @@ func (h *Handler) ListTopReaders(c *fiber.Ctx) error {
 		return fiber.ErrInternalServerError
 	}
 
-	return c.JSON(fiber.Map{"data": rows})
+	response := fiber.Map{"data": rows}
+	if cacheKey != "" {
+		setCache(c.Context(), h.Redis, cacheKey, response, time.Minute)
+	}
+	return c.JSON(response)
+}
+
+func getCache(ctx context.Context, rdb *redis.Client, key string) (string, bool) {
+	if rdb == nil || key == "" {
+		return "", false
+	}
+	cached, err := rdb.Get(ctx, key).Result()
+	if err == nil {
+		return cached, true
+	}
+	return "", false
+}
+
+func setCache(ctx context.Context, rdb *redis.Client, key string, value any, ttl time.Duration) {
+	if rdb == nil || key == "" {
+		return
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return
+	}
+	rdb.Set(ctx, key, data, ttl) //nolint:errcheck
 }
 
 func startOfWeekUTC(now time.Time) time.Time {

@@ -9,6 +9,7 @@ import (
 func ParsePagination(c *fiber.Ctx, defaultPage, defaultLimit int) (page int, limit int) {
 	page = defaultPage
 	limit = defaultLimit
+	const maxLimit = 50
 
 	if v := c.Query("page"); v != "" {
 		if i, err := strconv.Atoi(v); err == nil && i > 0 {
@@ -19,6 +20,9 @@ func ParsePagination(c *fiber.Ctx, defaultPage, defaultLimit int) (page int, lim
 		if i, err := strconv.Atoi(v); err == nil && i > 0 {
 			limit = i
 		}
+	}
+	if limit > maxLimit {
+		limit = maxLimit
 	}
 	return page, limit
 }
